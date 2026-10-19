@@ -1,0 +1,21 @@
+# Compiled binaries
+control_sim
+*.o
+*.out
+*.exe
+
+# Generated reports
+control_report.txt
+
+# Archives
+*.tar.gz
+
+# Build directories
+build/
+debug/
+.cache/
+
+# Editor files
+*.swp
+*.swo
+*~

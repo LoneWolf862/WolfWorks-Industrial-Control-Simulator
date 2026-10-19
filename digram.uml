@@ -1,0 +1,248 @@
+@startuml
+title WolfWorks Industrial Control Simulator\nProgram Architecture
+
+skinparam classAttributeIconSize 0
+skinparam linetype ortho
+
+' ============================================================
+' ENUM
+' ============================================================
+
+enum SystemMode {
+    STOPPED
+    MANUAL
+    AUTO
+    FAULT
+}
+
+' ============================================================
+' ABSTRACT BASE CLASS
+' ============================================================
+
+abstract class IOPoint {
+    - id : int
+    - tag : std::string
+    - description : std::string
+
+    + IOPoint(id : int, tag : std::string, description : std::string)
+    + {abstract} ~IOPoint()
+
+    + getID() : int
+    + getTag() : const std::string&
+    + getDescription() : const std::string&
+
+    + {abstract} display() : void
+}
+
+note right of IOPoint
+Common interface for all simulated
+industrial I/O points.
+
+display() is virtual, allowing
+polymorphic calls through IOPoint.
+end note
+
+
+' ============================================================
+' DIGITAL INPUT
+' ============================================================
+
+class DigitalInput {
+    - state : bool
+
+    + DigitalInput(id : int, tag : std::string,\n  description : std::string, state : bool)
+
+    + setState(state : bool) : void
+    + toggle() : void
+    + getState() : bool
+
+    + display() : void
+}
+
+
+' ============================================================
+' ANALOG INPUT
+' ============================================================
+
+class AnalogInput {
+    - value : float
+    - minimum : float
+    - maximum : float
+    - unit : std::string
+
+    + AnalogInput(id : int, tag : std::string,\n  description : std::string,\n  unit : std::string, minimum : float,\n  maximum : float, value : float)
+
+    + setValue(value : float) : void
+
+    + getValue() : float
+    + getMinimum() : float
+    + getMaximum() : float
+    + getUnit() : const std::string&
+
+    + display() : void
+}
+
+note right of AnalogInput
+setValue() clamps the value
+between minimum and maximum.
+end note
+
+
+' ============================================================
+' DIGITAL OUTPUT
+' ============================================================
+
+class DigitalOutput {
+    - state : bool
+
+    + DigitalOutput(id : int, tag : std::string,\n  description : std::string, state : bool)
+
+    + setState(state : bool) : void
+    + getState() : bool
+
+    + display() : void
+}
+
+
+' ============================================================
+' INHERITANCE
+' ============================================================
+
+IOPoint <|-- DigitalInput
+IOPoint <|-- AnalogInput
+IOPoint <|-- DigitalOutput
+
+
+' ============================================================
+' CONTROL SYSTEM
+' ============================================================
+
+class ControlSystem {
+    - ioPoints : std::vector<std::shared_ptr<IOPoint>>
+    - mode : SystemMode
+    - running : bool
+    - fillRequest : bool
+    - scanCount : unsigned long
+
+    + ControlSystem()
+
+    + initialize() : void
+
+    + displayAllIO() : void
+    + displayStatus() : void
+    + displayDiagnostics() : void
+
+    + runScan() : void
+    + simulateProcess() : void
+
+    + findPoint(tag : std::string) : std::shared_ptr<IOPoint>
+
+    + toggleDigitalInput(tag : std::string) : bool
+    + toggleDigitalOutput(tag : std::string) : bool
+    + setAnalogInput(tag : std::string, value : float) : bool
+
+    + exportReport(fileName : std::string) : bool
+
+    + getMode() : SystemMode
+    + setMode(newMode : SystemMode) : void
+
+    + isRunning() : bool
+    + getScanCount() : unsigned long
+}
+
+ControlSystem --> SystemMode : current mode
+ControlSystem *-- "8" IOPoint : owns via shared_ptr
+
+note right of ControlSystem
+Central controller.
+
+Stores all I/O polymorphically in:
+vector<shared_ptr<IOPoint>>
+
+Responsible for:
+• control scans
+• AUTO logic
+• MANUAL control
+• safety / E-stop
+• process simulation
+• diagnostics
+• report generation
+end note
+
+
+' ============================================================
+' SIMULATED I/O INSTANCES
+' ============================================================
+
+package "Configured I/O Points" {
+
+    object "PB_START\nDigitalInput" as PB_START
+    object "PB_STOP\nDigitalInput" as PB_STOP
+    object "ESTOP\nDigitalInput" as ESTOP
+
+    object "LT_101\nAnalogInput\nTank Level (%)" as LT101
+    object "PT_101\nAnalogInput\nTank Pressure (PSI)" as PT101
+
+    object "PUMP_101\nDigitalOutput\nFill Pump" as PUMP101
+    object "XV_101\nDigitalOutput\nFill Valve" as XV101
+    object "ALARM\nDigitalOutput\nGeneral Alarm" as ALARM
+}
+
+ControlSystem ..> PB_START
+ControlSystem ..> PB_STOP
+ControlSystem ..> ESTOP
+ControlSystem ..> LT101
+ControlSystem ..> PT101
+ControlSystem ..> PUMP101
+ControlSystem ..> XV101
+ControlSystem ..> ALARM
+
+
+' ============================================================
+' CONTROL RELATIONSHIPS
+' ============================================================
+
+PB_START ..> ControlSystem : start request
+PB_STOP ..> ControlSystem : stop request
+ESTOP ..> ControlSystem : safety shutdown
+
+LT101 ..> ControlSystem : level feedback
+
+ControlSystem ..> PUMP101 : command
+ControlSystem ..> XV101 : command
+ControlSystem ..> ALARM : fault indication
+
+PUMP101 ..> LT101 : increases level\nwhen pump + valve ON
+XV101 ..> LT101 : permits filling
+
+LT101 ..> PT101 : pressure derived\nfrom tank level
+
+
+' ============================================================
+' PROGRAM ENTRY
+' ============================================================
+
+class "main.cpp" as Main {
+    + main() : int
+    - displayMenu(controller) : void
+    - clearBadInput() : void
+}
+
+Main --> ControlSystem : creates / operates
+
+note left of Main
+Console user interface.
+
+Main menu allows the operator to:
+• inspect I/O
+• change simulated inputs
+• search by tag
+• change operating mode
+• execute scans
+• run simulation
+• view diagnostics
+• export reports
+• manually control outputs
+end note
+
+@enduml
